@@ -70,6 +70,10 @@ void rfm23_init() {
 	// init spi
 	rfm23_spi_init();
 	
+	// read all interrupts
+	rfm23_read(RFM23_03h_ISR1);
+	rfm23_read(RFM23_04h_ISR2);
+	
 	// wait for POR 16ms
 	_delay_ms(16);
 }
@@ -152,7 +156,7 @@ uint8_t rfm23_read(uint8_t addr) {
 }
 
 /* write to rfm registers in burst mode */
-void rfm23_write_burst(uint8_t addr, uint8_t (*val)[], uint8_t len) {
+void rfm23_write_burst(uint8_t addr, uint8_t val[], uint8_t len) {
 
 	// first bit 1 means write
 	addr |= (1 << 7);
@@ -165,7 +169,7 @@ void rfm23_write_burst(uint8_t addr, uint8_t (*val)[], uint8_t len) {
 	
 	// write values
 	for (uint8_t i = 0; i < len; i++) {
-		rfm23_spi_write((*val)[i]);
+		rfm23_spi_write(val[i]);
 	}
 	
 	// unselect module and finish operation
@@ -173,7 +177,7 @@ void rfm23_write_burst(uint8_t addr, uint8_t (*val)[], uint8_t len) {
 }
 
 /* read from rfm registers in burst mode */
-void rfm23_read_burst(uint8_t addr, uint8_t (*val)[], uint8_t len) {
+void rfm23_read_burst(uint8_t addr, uint8_t val[], uint8_t len) {
 	
 	// first bit 0 means read
 	addr &= ~(1 << 7);
@@ -186,7 +190,7 @@ void rfm23_read_burst(uint8_t addr, uint8_t (*val)[], uint8_t len) {
 	
 	// read values
 	for (uint8_t i = 0; i < len; i++) {
-		(*val)[i] = rfm23_spi_write(0x00);
+		val[i] = rfm23_spi_write(0x00);
 	}
 	
 	// unselect module and finish operation
@@ -256,11 +260,11 @@ void rfm23_enable_interrupt_2(uint8_t ir) {
 
 /* return saved interrupt status registers */
 uint8_t rfm23_get_isr_1() {
-	return rfm23_read(RFM23_03h_ISR1);
+	return RFM23_ISR1;
 }
 
 uint8_t rfm23_get_isr_2() {
-	return rfm23_read(RFM23_04h_ISR2);
+	return RFM23_ISR2;
 }
 
 
@@ -340,7 +344,7 @@ void rfm23_clear_txfifo() {
 */
 
 /* send data */
-void rfm23_send(uint8_t (*data)[], uint8_t len) {
+void rfm23_send(uint8_t data[], uint8_t len) {
 	
 	// clear tx fifo
 	rfm23_clear_txfifo();
@@ -350,18 +354,93 @@ void rfm23_send(uint8_t (*data)[], uint8_t len) {
 	
 	// write data into fifo
 	rfm23_write_burst(0x7f, data, len);
-	
+
 	// send data
 	rfm23_write(0x07, 0x09);
 }
 
+void rfm23_send_addressed(uint8_t addr, uint8_t data[], uint8_t len) {
+	
+	// set receiver address
+	rfm23_write(0x3b, addr);
+	
+	// send data
+	rfm23_send(data, len);
+}
+
+void rfm23_set_address(uint8_t addr) {
+	
+	// set sender address
+	rfm23_write(0x3A, addr);
+	
+	// check header2 on receive
+	rfm23_write(0x40, addr);
+	
+	// only receive when header2 match
+	rfm23_write(0x32, 0x04);
+}
+
 /* receive data */
-void rfm23_receive(uint8_t *data, uint8_t *len) {
-	len = rfm23_get_packet_length();
-	rfm23_read_burst(0x7f, &data, len);
+void rfm23_receive(uint8_t data[], uint8_t len) {
+	rfm23_read_burst(0x7f, data, len);
 }
 
 /* get packet length */
 uint8_t rfm23_get_packet_length() {
 	return rfm23_read(0x4b);
+}
+
+
+/*
+	wait functions
+*/
+
+/* wait for IPKSENT interrupt */
+/* @TODO */
+void rfm23_wait_packet_sent(uint8_t timeout) {
+	printf("wait for packet sent...\n");
+	
+	//uint8_t current_time = 0;
+	
+	// handle interrupt
+	rfm23_handle_interrupt();
+	
+	while (!(rfm23_get_isr_1() & (1 << RFM23_03h_ISR1_IPKSENT))/* && !(current_time > timeout)*/) {
+		rfm23_handle_interrupt();
+	}
+}
+
+
+
+/*
+	other functions
+*/
+
+/* get temperature
+   temp = return_value * 0.5 - 64
+*/
+uint8_t rfm23_get_temperature() {
+	
+	// set adc input and reference
+	rfm23_write(0x0f, 0x00 | (1 << 6) | (1 << 5) | (1 << 4));
+	
+	// set temperature range
+	// -64 to 64°C, ADC8 LSB: 0.5°C
+	rfm23_write(0x12, 0x00 | (1 << 5));
+	
+	// adcstart
+	rfm23_write(0x0f, 0x00 | (1 << 7));
+	
+	// wait for adc_done
+	while (!rfm23_read(0x0f) & (1 << 7));
+	
+	// return adc value
+	return rfm23_read(0x11);
+}
+
+/* wake-up timer */
+void rfm23_set_wakeup_time(uint8_t seconds) {
+	rfm23_write(0x14, 0x0A);
+	rfm23_write(0x15, 0x00);
+	rfm23_write(0x16, 8 * seconds); // 1 = 125ms, 8 = 1000ms = 1s
 }

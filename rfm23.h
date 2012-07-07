@@ -92,8 +92,8 @@ void rfm23_reset();
 */
 void rfm23_write(uint8_t addr, uint8_t val);
 uint8_t rfm23_read(uint8_t addr);
-void rfm23_write_burst(uint8_t addr, uint8_t (*val)[], uint8_t len);
-void rfm23_read_burst(uint8_t addr, uint8_t (*val)[], uint8_t len);
+void rfm23_write_burst(uint8_t addr, uint8_t val[], uint8_t len);
+void rfm23_read_burst(uint8_t addr, uint8_t val[], uint8_t len);
 
 
 /*
@@ -127,8 +127,8 @@ void rfm23_clear_txfifo();
 /*
 	send & receive functions
 */
-void rfm23_send(uint8_t (*val)[], uint8_t len);
-void rfm23_receive(uint8_t *data, uint8_t *len);
+void rfm23_send(uint8_t data[], uint8_t len);
+void rfm23_receive(uint8_t data[], uint8_t len);
 uint8_t rfm23_get_packet_length();
 
 
@@ -136,21 +136,19 @@ uint8_t rfm23_get_packet_length();
 	addressed send & receive functions
 */
 void rfm23_set_address(uint8_t addr);
-void rfm23_send_addressed(uint8_t addr, uint8_t (*val)[], uint8_t len);
+void rfm23_send_addressed(uint8_t addr, uint8_t data[], uint8_t len);
 
 
 /*
 	wait functions
 */
-uint8_t rfm23_wait_packet_sent(uint8_t timeout);
-
-uint8_t rfm23_wait_interrupt_1(uint8_t reg, uint8_t timeout);
-uint8_t rfm23_wait_interrupt_2(uint8_t reg, uint8_t timeout);
+void rfm23_wait_packet_sent(uint8_t timeout);
+/*uint8_t rfm23_wait_interrupt_1(uint8_t reg, uint8_t timeout);
+uint8_t rfm23_wait_interrupt_2(uint8_t reg, uint8_t timeout);*/
 
 
 /*
 	other functions
 */
 uint8_t rfm23_get_temperature();
-void rfm23_set_txpower(uint8_t txpower);
 void rfm23_set_wakeup_time(uint8_t seconds);
