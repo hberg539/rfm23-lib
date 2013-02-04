@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include "ser.h"
 
-FILE ser_file = FDEV_SETUP_STREAM(ser_write, NULL, _FDEV_SETUP_RW);
+FILE ser_file = FDEV_SETUP_STREAM(ser_write, ser_read, _FDEV_SETUP_RW);
 
 // init serial
 void ser_init() {
@@ -26,9 +26,19 @@ void ser_init() {
 	UCSR0A &= ~(1 << U2X0);
 }
 
+// enable rx interrupt
+void ser_en_rx_int() {
+	UCSR0B |= (1 << RXCIE0);
+}
+
 // set serial as stdout
 void ser_set_stdout() {
 	 stdout = &ser_file;
+}
+
+// set serial as stdin
+void ser_set_stdin() {
+	stdin = &ser_file;
 }
 
 // write serial

@@ -3,6 +3,7 @@
 */
 
 #include <avr/io.h>
+#include <stdio.h>
 #include <util/delay.h>
 #include "rfm23.h"
 
@@ -64,18 +65,25 @@ void rfm23_spi_unselect() {
 /* initialize rfm module */
 void rfm23_init() {
 	
+	// wait for POR 16.8ms
+	_delay_ms(17);
+	
 	// configure nirq port as input
 	RFM23_NIRQ_DDR &= ~(1 << RFM23_NIRQ);
 	
 	// init spi
 	rfm23_spi_init();
 	
+	// sw reset
+	rfm23_reset();
+	
+	// disable all interrupts
+	rfm23_enable_interrupt_1(0x00);
+	rfm23_enable_interrupt_2(0x00);
+	
 	// read all interrupts
 	rfm23_read(RFM23_03h_ISR1);
 	rfm23_read(RFM23_04h_ISR2);
-	
-	// wait for POR 16ms
-	_delay_ms(16);
 }
 
 /* test read/write */
@@ -107,7 +115,8 @@ uint8_t rfm23_test() {
 
 /* software reset module */
 void rfm23_reset() {
-	
+	rfm23_write(RFM23_07h_OPMODE, RFM23_07h_OPMODE_SWRES);
+	_delay_ms(1);
 }
 
 
@@ -117,6 +126,9 @@ void rfm23_reset() {
 
 /* write to rfm registers */
 void rfm23_write(uint8_t addr, uint8_t val) {
+	
+	// debug
+	uint8_t daddr = addr;
 	
 	// first bit 1 means write
 	addr |= (1 << 7);
@@ -132,6 +144,11 @@ void rfm23_write(uint8_t addr, uint8_t val) {
 	
 	// unselect module and finish operation
 	rfm23_spi_unselect();
+	
+	// debug
+/*#ifdef RFM23_DEBUG_WRITE
+	printf("[d] write:%x:%x\n", daddr, val);
+#endif*/
 }
 
 /* read from rfm registers */
@@ -152,11 +169,19 @@ uint8_t rfm23_read(uint8_t addr) {
 	// unselect module and finish operation
 	rfm23_spi_unselect();
 	
+	// debug
+/*#ifdef RFM23_DEBUG_READ
+	printf("[d] read:%x:%x\n", addr, val);
+#endif*/
+	
 	return val;
 }
 
 /* write to rfm registers in burst mode */
 void rfm23_write_burst(uint8_t addr, uint8_t val[], uint8_t len) {
+
+	// debug
+	uint8_t daddr = addr;
 
 	// first bit 1 means write
 	addr |= (1 << 7);
@@ -174,6 +199,15 @@ void rfm23_write_burst(uint8_t addr, uint8_t val[], uint8_t len) {
 	
 	// unselect module and finish operation
 	rfm23_spi_unselect();
+	
+	// debug
+#ifdef RFM23_DEBUG_WRITE
+	printf("[d] writeburst %x: ", daddr);
+	for (uint8_t i = 0; i < len; i++) {
+		printf("%x ", val[i]);
+	}
+	printf("\n");
+#endif
 }
 
 /* read from rfm registers in burst mode */
@@ -226,6 +260,10 @@ uint8_t rfm23_on_interrupt() {
 		// reset bit
 		RFM23_STATUS &= ~(1 << RFM23_STATUS_INTERRUPT);
 		
+#ifdef RFM23_DEBUG_INTERRUPT
+		printf("[d] on_interrupt\n");
+#endif
+		
 		return 0xFF;
 	}
 	
@@ -242,6 +280,27 @@ void rfm23_handle_interrupt() {
 	
 	// set interrupt bit
 	RFM23_STATUS |= (1 << RFM23_STATUS_INTERRUPT);
+	
+#ifdef RFM23_DEBUG_INTERRUPT
+	printf("[d] int handle: ");
+	if (RFM23_ISR1 & (1 << 0)) { printf("[icrcerror] "); }
+	if (RFM23_ISR1 & (1 << 1)) { printf("[ipkvalid] "); }
+	if (RFM23_ISR1 & (1 << 2)) { printf("[ipksent] "); }
+	if (RFM23_ISR1 & (1 << 3)) { printf("[iext] "); }
+	if (RFM23_ISR1 & (1 << 4)) { printf("[irxffafull] "); }
+	if (RFM23_ISR1 & (1 << 5)) { printf("[itxffaem] "); }
+	if (RFM23_ISR1 & (1 << 6)) { printf("[itxffafull] "); }
+	if (RFM23_ISR1 & (1 << 7)) { printf("[ifferr] "); }		
+	if (RFM23_ISR2 & (1 << 0)) { printf("[ipor] "); }
+	if (RFM23_ISR2 & (1 << 1)) { printf("[ichiprdy] "); }
+	if (RFM23_ISR2 & (1 << 2)) { printf("[ifbd] "); }
+	if (RFM23_ISR2 & (1 << 3)) { printf("[iwut] "); }
+	if (RFM23_ISR2 & (1 << 4)) { printf("[irssi] "); }
+	if (RFM23_ISR2 & (1 << 5)) { printf("[ipreainval] "); }
+	if (RFM23_ISR2 & (1 << 6)) { printf("[ipreaval] "); }
+	if (RFM23_ISR2 & (1 << 7)) { printf("[iswdet] "); }
+	printf("\n");
+#endif
 	
 	// wait some ms
 	// dont know why this is needed
@@ -279,7 +338,7 @@ void rfm23_mode_ready() {
 	rfm23_write(RFM23_07h_OPMODE, RFM23_07h_OPMODE_XTON);
 	
 	// wait for module
-	_delay_us(200);	
+	_delay_ms(1);
 }
 
 /* mode RXON */
@@ -289,7 +348,7 @@ void rfm23_mode_rx() {
 	rfm23_write(RFM23_07h_OPMODE, RFM23_07h_OPMODE_RXON);
 	
 	// wait for module
-	_delay_us(200);	
+	_delay_ms(1);
 }
 
 /* mode TXON */
@@ -299,7 +358,7 @@ void rfm23_mode_tx() {
 	rfm23_write(RFM23_07h_OPMODE, RFM23_07h_OPMODE_TXON);
 	
 	// wait for module
-	_delay_us(200);
+	_delay_ms(1);
 }
 
 /* mode WAKEUP
@@ -318,7 +377,7 @@ void rfm23_mode_wakeup() {
 	rfm23_read(RFM23_04h_ISR2);
 	
 	// wait for module
-	_delay_us(200);	
+	_delay_ms(10);
 }
 
 
@@ -328,14 +387,18 @@ void rfm23_mode_wakeup() {
 
 /* clear rx fifo */
 void rfm23_clear_rxfifo() {
-	rfm23_write(0x08, 0x02);
-	rfm23_write(0x08, 0x00);
+	uint8_t opmode08h = rfm23_read(0x08);
+	
+	rfm23_write(0x08, opmode08h | (1 << 1));
+	rfm23_write(0x08, opmode08h | (0 << 1));
 }
 
 /* clear tx fifo */
 void rfm23_clear_txfifo() {
-	rfm23_write(0x08, 0x01);
-	rfm23_write(0x08, 0x00);
+	uint8_t opmode08h = rfm23_read(0x08);
+	
+	rfm23_write(0x08, opmode08h | (1 << 0));
+	rfm23_write(0x08, opmode08h | (0 << 0));
 }
 
 
@@ -357,11 +420,14 @@ void rfm23_send(uint8_t data[], uint8_t len) {
 
 	// send data
 	rfm23_write(0x07, 0x09);
+	
+	// wait
+	rfm23_wait_opmode(RFM23_07h_OPMODE_TXON);
 }
 
 void rfm23_send_addressed(uint8_t addr, uint8_t data[], uint8_t len) {
 	
-	// set receiver address
+	// set receiver address (header2)
 	rfm23_write(0x3b, addr);
 	
 	// send data
@@ -370,14 +436,36 @@ void rfm23_send_addressed(uint8_t addr, uint8_t data[], uint8_t len) {
 
 void rfm23_set_address(uint8_t addr) {
 	
-	// set sender address
-	rfm23_write(0x3A, addr);
-	
-	// check header2 on receive
+	// set sender address (header1)
+	rfm23_write(0x3c, addr);
 	rfm23_write(0x40, addr);
 	
 	// only receive when header2 match
-	rfm23_write(0x32, 0x04);
+	//rfm23_write(0x32, 0x84);
+}
+
+/* get address */
+uint8_t rfm23_get_address() {
+	return rfm23_read(0x3c);
+}
+
+/* get sender address */
+uint8_t rfm23_get_packet_sender_address() {
+	return rfm23_read(0x49);
+}
+
+/* get receiver address */
+uint8_t rfm23_get_packet_receiver_address() {
+	return rfm23_read(0x48);
+}
+
+/* packet is broadcast */
+uint8_t rfm23_packet_is_broadcast() {
+	if (rfm23_get_packet_receiver_address() == 0x00) {
+		return 0xff;
+	} else {
+		return 0x00;
+	}
 }
 
 /* receive data */
@@ -410,6 +498,10 @@ void rfm23_wait_packet_sent(uint8_t timeout) {
 	}
 }
 
+/* wait for finished opmode */
+void rfm23_wait_opmode(uint8_t opmode) {
+	while (rfm23_read(RFM23_07h_OPMODE) & opmode);
+}
 
 
 /*
@@ -441,6 +533,8 @@ uint8_t rfm23_get_temperature() {
 /* wake-up timer */
 void rfm23_set_wakeup_time(uint8_t seconds) {
 	rfm23_write(0x14, 0x0A);
-	rfm23_write(0x15, 0x00);
-	rfm23_write(0x16, 8 * seconds); // 1 = 125ms, 8 = 1000ms = 1s
+	
+	uint16_t sec = 8 * seconds; // 1 = 125ms, 8 = 1000ms = 1s
+	rfm23_write(0x15, (sec >> 8) & 0xFF);
+	rfm23_write(0x16, sec & 0xFF);
 }
